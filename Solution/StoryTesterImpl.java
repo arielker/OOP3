@@ -1,6 +1,8 @@
 package Solution;
 
 import Provided.StoryTester;
+import Provided.WhenNotFoundException;
+import Provided.WordNotFoundException;
 
 import java.lang.annotation.*;
 import java.lang.reflect.*;
@@ -40,6 +42,12 @@ public class StoryTesterImpl implements StoryTester {
         }
         return true;
     }
+
+    private Class<?> getFirstWord(String sentence) {
+        String w = sentence.substring(0, sentence.indexOf(" "));
+        return w.equals("Given") ? Given.class : w.equals("When") ? When.class : Then.class;
+    }
+
 
     private Object nestedGiven(String sentence, Class<?> test)
 
