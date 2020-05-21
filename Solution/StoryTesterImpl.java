@@ -48,8 +48,7 @@ public class StoryTesterImpl implements StoryTester {
         return w.equals("Given") ? Given.class : w.equals("When") ? When.class : Then.class;
     }
 
-
-    private Object nestedGiven(String sentence, Class<?> test)
+    private Object nestedGiven(String sentence, Class<?> test){} //TODO implement
 
     @Override
     public void testOnNestedClasses(String story, Class<?> testClass) throws Exception {
