@@ -72,7 +72,20 @@ public class StoryTesterImpl implements StoryTester {
         return map;
     }
 
+    private Object[] parseArguments(List<String> args) {
+        Object[] act_args = new Object[args.size()];
+        for (int i = 0; i < args.size(); i++) { //parsing arguments
+            try {
+                act_args[i] = Integer.parseInt(args.get(i));
+            } catch (NumberFormatException e) {
+                act_args[i] = args.get(i);
+            }
+        }
+        return act_args;
+    }
+
     private StoryTestExceptionImpl findRightMethod(String sentence, Class<?> testClass) throws Exception {
+        //TODO: before invoke, must split line to 'or' parts and 'and' parts
         if (null == sentence || null == testClass){
             throw new IllegalArgumentException();
         }
@@ -109,14 +122,7 @@ public class StoryTesterImpl implements StoryTester {
                     continue;
                 }
             }
-            Object[] act_args = new Object[args.size()];
-            for (int i = 0; i < args.size(); i++) { //parsing arguments
-                try {
-                    act_args[i] = Integer.parseInt(args.get(i));
-                } catch (NumberFormatException e) {
-                    act_args[i] = args.get(i);
-                }
-            }
+            Object act_args = parseArguments(args);
             met.setAccessible(true);
             try {
                 met.invoke(emptyInst, act_args);
@@ -239,6 +245,7 @@ public class StoryTesterImpl implements StoryTester {
                 backupMap.clear();
                 backupMap = backup(object);
             }
+            i++;
             try {
                 StoryTestExceptionImpl storyTestException = findRightMethod(sentence, testClass);
                 if (null == storyTestException)
