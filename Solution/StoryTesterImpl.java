@@ -145,7 +145,9 @@ public class StoryTesterImpl implements StoryTester {
             Constructor<?> c = testClass.getConstructor();
             c.setAccessible(true);
             return c.newInstance();
-        } catch (Exception e) { //TODO: what if cannot create new instance?
+        } catch (Exception e) {
+            //TODO: what if cannot create new instance?
+            //TODO: solution to the above (?) - create a new instance using parent class
             e.printStackTrace();
         }
         return null;
@@ -174,6 +176,45 @@ public class StoryTesterImpl implements StoryTester {
         return w.equals("Given") ? Given.class : (w.equals("When") ? When.class : Then.class);
     }
 
+    private void restore (Object object, Map<Field, Object> fieldObjectMap){
+        if (null == object || fieldObjectMap.isEmpty())
+            return;
+        Map<Field, Object> temp = new HashMap<>();
+        Field[] fields = object.getClass().getDeclaredFields();
+        for (Field field : fields) {
+            if (!fieldObjectMap.containsKey(field))
+                continue; //shouldn't happen I think, and if happens then we need to be concerned :(
+            field.setAccessible(true);
+            Object fieldData = fieldObjectMap.get(field);
+            try {
+                Class<?> c = fieldData.getClass();
+                if (fieldData instanceof Cloneable) { //if cloneable
+                    try {
+                        Method method = c.getDeclaredMethod("clone");
+                        method.setAccessible(true);
+                        temp.put(field, method.invoke(fieldData));
+                    } catch (Exception e){
+                        //TODO: lol, what to do here? :D
+                        e.printStackTrace();
+                    }
+                } else {
+                    try { //is not Cloneable -> copy or save reference...
+                        Constructor constructor = c.getDeclaredConstructor();
+                        constructor.setAccessible(true);
+                        temp.put(field, constructor.newInstance(fieldData));
+                    } catch (NoSuchMethodException | InvocationTargetException | InstantiationException | IllegalAccessException e) {
+                        e.printStackTrace();
+                        temp.put(field, fieldData); //is it safe and OK?
+                    }
+                }
+            } catch (SecurityException | IllegalArgumentException e) {
+                e.printStackTrace();
+            }
+        }
+        fieldObjectMap.clear();
+        fieldObjectMap = temp;
+    }
+
     @Override
     public void testOnInheritanceTree(String story, Class<?> testClass) throws Exception {
         if (story == null || testClass == null) {
@@ -187,7 +228,7 @@ public class StoryTesterImpl implements StoryTester {
         args.clear();
         int failed = 0;
         StoryTestExceptionImpl save_first = null;
-        Map<Field, Object> backup = backup(object);
+        Map<Field, Object> backupMap = backup(object);
         int i = 0;
         for (String sentence : sentences) {
             if (i == 0){ //meaning, it's a 'Given' sentence
@@ -195,14 +236,15 @@ public class StoryTesterImpl implements StoryTester {
                 continue;
             }
             if (sentence.startsWith("When") && sentences[i - 1].startsWith("Then")) {
-                backup.clear();
-                backup = backup(object);
+                backupMap.clear();
+                backupMap = backup(object);
             }
             try {
                 StoryTestExceptionImpl storyTestException = findRightMethod(sentence, testClass);
                 if (null == storyTestException)
                     continue;
                 failed++;
+                restore(object, backupMap);
                 if (null != save_first)
                     continue;
                 save_first = storyTestException;
