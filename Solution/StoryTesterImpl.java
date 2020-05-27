@@ -1,13 +1,16 @@
 package Solution;
 
 import Provided.*;
-import jdk.dynalink.linker.ConversionComparator;
 import org.junit.ComparisonFailure;
 
-import java.lang.annotation.*;
-import java.lang.reflect.*;
-import java.security.InvalidParameterException;
-import java.util.*;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 
 public class StoryTesterImpl implements StoryTester {
 
@@ -84,22 +87,37 @@ public class StoryTesterImpl implements StoryTester {
         return act_args;
     }
 
+    private List<List<String>> fillArguments(String sentence){
+        String[] or_split = sentence.split(" or ");
+        List<List<String>> args = new LinkedList<>();
+        for (int i = 0; i < or_split.length; i++) {
+            args.set(i, new LinkedList<>());
+            String[] or_args = or_split[i].split(" ");
+            for (int j = 0; j < or_args.length; j++) {
+                if (j + 1 == or_args.length || or_args[j + 1].equals("and"))
+                    args.get(i).add(or_args[j]);
+            }
+        }
+        return args;
+    }
+
     private StoryTestExceptionImpl findRightMethod(String sentence, Class<?> testClass) throws Exception {
         //TODO: before invoke, must split line to 'or' parts and 'and' parts
-        if (null == sentence || null == testClass){
-            throw new IllegalArgumentException();
-        }
+//        if (null == sentence || null == testClass){
+//            throw new IllegalArgumentException();
+//        }
         Class<?> emptyInst = (Class<?>) createEmptyObject(testClass);
         Method[] methods = testClass.getMethods();
         Class<?> annParam = getFirstWord(sentence);
-        List<String> args = new LinkedList<>();
+        List<List<String>> args = fillArguments(sentence);
+        int i = 0;
         for (Method met : methods) {
             if (annParam.getSimpleName().equals("Given")) {
                 Given ann =  met.getAnnotation(Given.class);
                 if (ann == null) {
                     continue;
                 }
-                if (!compareAnnotationValue(ann.value(), sentence, args)) {
+                if (!compareAnnotationValue(ann.value(), sentence, args.get(i))) {
                     args.clear();
                     continue;
                 }
@@ -108,7 +126,7 @@ public class StoryTesterImpl implements StoryTester {
                 if (ann == null) {
                     continue;
                 }
-                if (!compareAnnotationValue(ann.value(), sentence, args)) {
+                if (!compareAnnotationValue(ann.value(), sentence, args.get(i))) {
                     args.clear();
                     continue;
                 }
@@ -117,22 +135,26 @@ public class StoryTesterImpl implements StoryTester {
                 if (ann == null) {
                     continue;
                 }
-                if (!compareAnnotationValue(ann.value(), sentence, args)) {
+                if (!compareAnnotationValue(ann.value(), sentence, args.get(i))) {
                     args.clear();
                     continue;
                 }
             }
-            Object act_args = parseArguments(args);
+            Object act_args = parseArguments(args.get(i));
+            i++;
             met.setAccessible(true);
             try {
                 met.invoke(emptyInst, act_args);
             } catch (ComparisonFailure e) {
-                //we have a failed 'Then' expression! (assuming it's the only exception that can be thrown according to PDF)
-                LinkedList<String> expected = new LinkedList<>();
-                LinkedList<String> fail = new LinkedList<>();
-                expected.add(e.getExpected()); // <- this is AMAZING!
-                fail.add(e.getActual()); // <- this is AMAZING!
-                return new StoryTestExceptionImpl(sentence, expected, fail);
+                if (i == args.size()) {
+                    //we have a failed 'Then' expression! (assuming it's the only exception that can be thrown according to PDF)
+                    LinkedList<String> expected = new LinkedList<>();
+                    LinkedList<String> fail = new LinkedList<>();
+                    expected.add(e.getExpected()); // <- this is AMAZING!
+                    fail.add(e.getActual()); // <- this is AMAZING!
+                    return new StoryTestExceptionImpl(sentence, expected, fail);
+                }
+                continue;
             }
             return null;
         }
@@ -257,6 +279,7 @@ public class StoryTesterImpl implements StoryTester {
                 save_first = storyTestException;
             } catch (WordNotFoundException w){
                 //TODO: what should I do if this happened?
+                w.printStackTrace();
             }
         }
         if (failed != 0) {
@@ -267,6 +290,23 @@ public class StoryTesterImpl implements StoryTester {
 
     @Override
     public void testOnNestedClasses(String story, Class<?> testClass) throws Exception {
-        //TODO: implement
+        if (null == story || null == testClass)
+            throw new IllegalArgumentException();
+        String given_sentence = story.split("\n")[0];
+        try {
+            if (null == findRightMethod(given_sentence, testClass))
+                testOnInheritanceTree(story, testClass);
+            else {
+                Class[] sub_classes = testClass.getDeclaredClasses();
+                for (Class<?> sub_class : sub_classes)
+                    testOnNestedClasses(story, sub_class);
+            }
+        } catch (GivenNotFoundException g){
+            Class[] sub_classes = testClass.getDeclaredClasses();
+            for (Class<?> sub_class : sub_classes)
+                testOnNestedClasses(story, sub_class);
+        } catch (IllegalArgumentException | WordNotFoundException e){
+            e.printStackTrace();
+        }
     }
 }
