@@ -207,7 +207,6 @@ public class StoryTesterImpl implements StoryTester {
     private void restore (Object object, Map<Field, Object> fieldObjectMap){
         if (null == object || fieldObjectMap.isEmpty())
             return;
-        Map<Field, Object> temp = new HashMap<>();
         Field[] fields = object.getClass().getDeclaredFields();
         for (Field field : fields) {
             if (!fieldObjectMap.containsKey(field))
@@ -220,7 +219,7 @@ public class StoryTesterImpl implements StoryTester {
                     try {
                         Method method = c.getDeclaredMethod("clone");
                         method.setAccessible(true);
-                        temp.put(field, method.invoke(fieldData));
+                        field.set(object, method.invoke(fieldData));
                     } catch (Exception e){
                         //TODO: lol, what to do here? :D
                         e.printStackTrace();
@@ -229,18 +228,16 @@ public class StoryTesterImpl implements StoryTester {
                     try { //is not Cloneable -> copy or save reference...
                         Constructor constructor = c.getDeclaredConstructor();
                         constructor.setAccessible(true);
-                        temp.put(field, constructor.newInstance(fieldData));
+                        field.set(object, constructor.newInstance(fieldData));
                     } catch (NoSuchMethodException | InvocationTargetException | InstantiationException | IllegalAccessException e) {
                         e.printStackTrace();
-                        temp.put(field, fieldData); //is it safe and OK?
+                        //TODO: if we reached here then it wad saved by reference, should we do something about it?
                     }
                 }
             } catch (SecurityException | IllegalArgumentException e) {
                 e.printStackTrace();
             }
         }
-        fieldObjectMap.clear();
-        fieldObjectMap = temp;
     }
 
     @Override
