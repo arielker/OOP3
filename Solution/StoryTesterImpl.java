@@ -14,61 +14,62 @@ import java.util.Map;
 
 public class StoryTesterImpl implements StoryTester {
 
-    private Method findGivenMethod(String sentence, Class<?> testClass, List<String> args){
+    private Method findGivenMethod(String sentence, Class<?> testClass) {
         //it's guaranteed that there is only ONE 'Given' method that fits (somewhere in the inheritance hierarchy)
         if (null == testClass)
             return null;
         Method[] declaredMethods = testClass.getDeclaredMethods();
-        for (Method method : declaredMethods){
+        for (Method method : declaredMethods) {
             Given ann = method.getAnnotation(Given.class);
-            if (null == ann) //not the write method
+            if (null == ann) //not the right method
                 continue;
             String value = ann.value();
-            if (compareAnnotationValue(value, sentence, args))
+            if (compareAnnotationValue(value, sentence))
                 return method;
-            args.clear();
         }
         //if reached here, the right 'Given' method is not here, going to find it in super class
-        return findGivenMethod(sentence, testClass.getSuperclass(), args);
+        return findGivenMethod(sentence, testClass.getSuperclass());
     }
 
-    private void invokeGivenMethod(Object object, Method method, List<String> args){
-        Object[] argsArray = new String[args.size()];
-        for (int i = 0; i < argsArray.length ; i++)
-            argsArray[i] = args.get(i);
+    private void invokeGivenMethod(Object object, Method method, List<String> args) {
+        Object[] argsArray = parseArguments(args);
         method.setAccessible(true);
         try {
             method.invoke(object, argsArray);
-        } catch (IllegalAccessException | InvocationTargetException e) {
-            e.printStackTrace();
+        } catch (IllegalAccessException | InvocationTargetException | IllegalArgumentException e) {
+            //e.printStackTrace();
         }
     }
 
-    private Map<Field, Object> backup(Object object){
+    private Map<Field, Object> backup(Object object) {
         if (null == object)
             return null;
         Map<Field, Object> map = new HashMap<>();
         Field[] fields = object.getClass().getDeclaredFields();
-        for (Field f : fields){
+        for (Field f : fields) {
             try {
                 f.setAccessible(true);
                 Object o = f.get(object);
+                if (o == null) {
+                    map.put(f, o);
+                    continue;
+                }
                 if (o instanceof Cloneable) { //try clone
                     Method clone = o.getClass().getDeclaredMethod("clone");
                     clone.setAccessible(true);
                     map.put(f, clone.invoke(o));
                 } else { //if there's no clone then try copy constructor
-                    Constructor copy_constructor = o.getClass().getDeclaredConstructor(o.getClass());
+                    Constructor<?> copy_constructor = o.getClass().getDeclaredConstructor(o.getClass());
                     copy_constructor.setAccessible(true);
                     map.put(f, copy_constructor.newInstance(o));
                 }
-            } catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException | InstantiationException e){
+            } catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException | InstantiationException e) {
                 //eventually, save basic reference
                 try {
                     Object o = f.get(object);
                     map.put(f, o);
-                } catch (Exception e1){
-                    e1.printStackTrace(); //shouldn't get here according to the exercise
+                } catch (Exception e1) {
+                    //e1.printStackTrace(); //shouldn't get here according to the exercise
                 }
             }
         }
@@ -87,11 +88,21 @@ public class StoryTesterImpl implements StoryTester {
         return act_args;
     }
 
-    private List<List<String>> fillArguments(String sentence){
+    private List<String> fillGivenArguments(String sentence) {
+        String[] and_split = sentence.split(" and ");
+        List<String> args = new LinkedList<>();
+        for (String inst : and_split) {
+            String[] words = inst.split(" ");
+            args.add(words[words.length - 1]);
+        }
+        return args;
+    }
+
+    private List<List<String>> fillArguments(String sentence) {
         String[] or_split = sentence.split(" or ");
         List<List<String>> args = new LinkedList<>();
         for (int i = 0; i < or_split.length; i++) {
-            args.set(i, new LinkedList<>());
+            args.add(new LinkedList<>());
             String[] or_args = or_split[i].split(" ");
             for (int j = 0; j < or_args.length; j++) {
                 if (j + 1 == or_args.length || or_args[j + 1].equals("and"))
@@ -101,95 +112,92 @@ public class StoryTesterImpl implements StoryTester {
         return args;
     }
 
-    private StoryTestExceptionImpl findRightMethod(String sentence, Class<?> testClass) throws Exception {
-        //TODO: before invoke, must split line to 'or' parts and 'and' parts
-//        if (null == sentence || null == testClass){
-//            throw new IllegalArgumentException();
-//        }
-        Class<?> emptyInst = (Class<?>) createEmptyObject(testClass);
-        Method[] methods = testClass.getMethods();
+    private StoryTestExceptionImpl findRightMethod(String sentence, Class<?> testClass, Object emptyInst) throws Exception {
+        Method[] methods = testClass.getDeclaredMethods();
+        String[] ors = sentence.split(" or ");
+        for (int i = 1; i < ors.length; i++) {
+            ors[i] = ors[0].substring(0, ors[0].indexOf(" ")).concat(" ").concat(ors[i]);
+        }
         Class<?> annParam = getFirstWord(sentence);
         List<List<String>> args = fillArguments(sentence);
         int i = 0;
-        for (Method met : methods) {
-            if (annParam.getSimpleName().equals("Given")) {
-                Given ann =  met.getAnnotation(Given.class);
-                if (ann == null) {
-                    continue;
+        LinkedList<String> expected = new LinkedList<>();
+        LinkedList<String> fail = new LinkedList<>();
+        for (String s : ors) {
+            for (Method met : methods) {
+                if (annParam.getSimpleName().equals("Given")) {
+                    Given ann = met.getAnnotation(Given.class);
+                    if (ann == null || !compareAnnotationValue(ann.value(), s)) {
+                        continue;
+                    }
+                } else if (annParam.getSimpleName().equals("When")) {
+                    When ann = met.getAnnotation(When.class);
+                    if (ann == null || !compareAnnotationValue(ann.value(), s)) {
+                        continue;
+                    }
+                } else {
+                    Then ann = met.getAnnotation(Then.class);
+                    if (ann == null || !compareAnnotationValue(ann.value(), s)) {
+                        continue;
+                    }
                 }
-                if (!compareAnnotationValue(ann.value(), sentence, args.get(i))) {
-                    args.clear();
-                    continue;
+                Object[] act_args = parseArguments(args.get(i));
+                i++;
+                met.setAccessible(true);
+                try {
+                    met.invoke(emptyInst, act_args);
+                } catch (InvocationTargetException e) {
+                    if (e.getTargetException().getClass().equals(ComparisonFailure.class)) {
+                        ComparisonFailure cf = (ComparisonFailure) e.getTargetException();
+                        expected.add(cf.getExpected()); // <- this is AMAZING!
+                        fail.add(cf.getActual()); // <- this is AMAZING!
+                        if (i == args.size()) {
+                            //we have a failed 'Then' expression! (assuming it's the only exception that can be thrown according to PDF)
+                            return new StoryTestExceptionImpl(sentence, expected, fail);
+                        }
+                        continue;
+                    }
+                    throw e;
                 }
-            } else if(annParam.getSimpleName().equals("When")){
-                When ann =  met.getAnnotation(When.class);
-                if (ann == null) {
-                    continue;
-                }
-                if (!compareAnnotationValue(ann.value(), sentence, args.get(i))) {
-                    args.clear();
-                    continue;
-                }
-            } else {
-                Then ann =  met.getAnnotation(Then.class);
-                if (ann == null) {
-                    continue;
-                }
-                if (!compareAnnotationValue(ann.value(), sentence, args.get(i))) {
-                    args.clear();
-                    continue;
-                }
+                return null;
             }
-            Object act_args = parseArguments(args.get(i));
-            i++;
-            met.setAccessible(true);
-            try {
-                met.invoke(emptyInst, act_args);
-            } catch (ComparisonFailure e) {
-                if (i == args.size()) {
-                    //we have a failed 'Then' expression! (assuming it's the only exception that can be thrown according to PDF)
-                    LinkedList<String> expected = new LinkedList<>();
-                    LinkedList<String> fail = new LinkedList<>();
-                    expected.add(e.getExpected()); // <- this is AMAZING!
-                    fail.add(e.getActual()); // <- this is AMAZING!
-                    return new StoryTestExceptionImpl(sentence, expected, fail);
-                }
-                continue;
-            }
-            return null;
         }
         if (null == testClass.getSuperclass()) { //TODO: check if this exception might actually be thrown?
             String s = annParam.getSimpleName();
             throw s.equals("Given") ? new GivenNotFoundException() ://behold the beauty! the magnificent power of the ternary op.!:D
-                  s.equals("When") ? new WhenNotFoundException() : new ThenNotFoundException();
+                    s.equals("When") ? new WhenNotFoundException() : new ThenNotFoundException();
         }
-        return findRightMethod(sentence, testClass.getSuperclass());
+        return findRightMethod(sentence, testClass.getSuperclass(), emptyInst);
     }
 
     private Object createEmptyObject(Class<?> testClass) {
         if (null == testClass)
             return null;
         try {
-            Constructor<?> c = testClass.getConstructor();
+            Constructor<?> c = testClass.getDeclaredConstructor();
             c.setAccessible(true);
             return c.newInstance();
-        } catch (Exception e) {
-            //TODO: what if cannot create new instance?
-            //TODO: solution to the above (?) - create a new instance using parent class
-            e.printStackTrace();
+        } catch (InstantiationException | InvocationTargetException | NoSuchMethodException | IllegalAccessException e) {
+            Object enclosingObject = createEmptyObject(testClass.getEnclosingClass());
+            try {
+                Constructor<?> constructor = testClass.getDeclaredConstructor(enclosingObject.getClass());
+                constructor.setAccessible(true);
+                return constructor.newInstance(enclosingObject);
+            } catch (InstantiationException | InvocationTargetException | NoSuchMethodException | IllegalAccessException l) {
+//                l.printStackTrace();
+            }
         }
         return null;
     }
 
-    private boolean compareAnnotationValue(String value, String sentence, List<String> args) {
+    private boolean compareAnnotationValue(String value, String sentence/*, List<String> args*/) {
         String[] valueL = value.split(" ");
-        String[] sentenceL = sentence.split(sentence.substring(0, sentence.indexOf(" ")))[1].split(" ");
+        String[] sentenceL = sentence.split(sentence.substring(0, sentence.indexOf(" ") + 1))[1].split(" ");
         if (valueL.length != sentenceL.length) {
             return false;
         }
         for (int i = 0; i < valueL.length; i++) {
             if (valueL[i].charAt(0) == '&') {
-                args.add(sentenceL[i]);
                 continue;
             }
             if (!valueL[i].equals(sentenceL[i])) {
@@ -204,7 +212,7 @@ public class StoryTesterImpl implements StoryTester {
         return w.equals("Given") ? Given.class : (w.equals("When") ? When.class : Then.class);
     }
 
-    private void restore (Object object, Map<Field, Object> fieldObjectMap){
+    private void restore(Object object, Map<Field, Object> fieldObjectMap) {
         if (null == object || fieldObjectMap.isEmpty())
             return;
         Field[] fields = object.getClass().getDeclaredFields();
@@ -214,28 +222,9 @@ public class StoryTesterImpl implements StoryTester {
             field.setAccessible(true);
             Object fieldData = fieldObjectMap.get(field);
             try {
-                Class<?> c = fieldData.getClass();
-                if (fieldData instanceof Cloneable) { //if cloneable
-                    try {
-                        Method method = c.getDeclaredMethod("clone");
-                        method.setAccessible(true);
-                        field.set(object, method.invoke(fieldData));
-                    } catch (Exception e){
-                        //TODO: lol, what to do here? :D
-                        e.printStackTrace();
-                    }
-                } else {
-                    try { //is not Cloneable -> copy or save reference...
-                        Constructor constructor = c.getDeclaredConstructor();
-                        constructor.setAccessible(true);
-                        field.set(object, constructor.newInstance(fieldData));
-                    } catch (NoSuchMethodException | InvocationTargetException | InstantiationException | IllegalAccessException e) {
-                        e.printStackTrace();
-                        //TODO: if we reached here then it wad saved by reference, should we do something about it?
-                    }
-                }
-            } catch (SecurityException | IllegalArgumentException e) {
-                e.printStackTrace();
+                field.set(object, fieldData);
+            } catch (SecurityException | IllegalArgumentException | IllegalAccessException e) {
+                //e.printStackTrace();
             }
         }
     }
@@ -247,8 +236,11 @@ public class StoryTesterImpl implements StoryTester {
         }
         String[] sentences = story.split("\n");
         Object object = createEmptyObject(testClass);
-        List<String> args = new LinkedList<>();
-        Method givenMethod = findGivenMethod(sentences[0], testClass, args);
+        List<String> args = fillGivenArguments(sentences[0]);
+        Method givenMethod = findGivenMethod(sentences[0], testClass);
+        if (givenMethod == null) {
+            throw new GivenNotFoundException();
+        }
         invokeGivenMethod(object, givenMethod, args);
         args.clear();
         int failed = 0;
@@ -256,28 +248,23 @@ public class StoryTesterImpl implements StoryTester {
         Map<Field, Object> backupMap = backup(object);
         int i = 0;
         for (String sentence : sentences) {
-            if (i == 0){ //meaning, it's a 'Given' sentence
+            if (i == 0) { //meaning, it's a 'Given' sentence
                 i++;
                 continue;
             }
-            if (sentence.startsWith("When") && sentences[i - 1].startsWith("Then")) {
+            if (sentence.startsWith("When") && (sentences[i - 1].startsWith("Then"))) {
                 backupMap.clear();
                 backupMap = backup(object);
             }
             i++;
-            try {
-                StoryTestExceptionImpl storyTestException = findRightMethod(sentence, testClass);
-                if (null == storyTestException)
-                    continue;
-                failed++;
-                restore(object, backupMap);
-                if (null != save_first)
-                    continue;
-                save_first = storyTestException;
-            } catch (WordNotFoundException w){
-                //TODO: what should I do if this happened?
-                w.printStackTrace();
-            }
+            StoryTestExceptionImpl storyTestException = findRightMethod(sentence, testClass, object);
+            if (null == storyTestException)
+                continue;
+            failed++;
+            restore(object, backupMap);
+            if (null != save_first)
+                continue;
+            save_first = storyTestException;
         }
         if (failed != 0) {
             save_first.setNumOfFails(failed);
@@ -290,20 +277,13 @@ public class StoryTesterImpl implements StoryTester {
         if (null == story || null == testClass)
             throw new IllegalArgumentException();
         String given_sentence = story.split("\n")[0];
-        try {
-            if (null == findRightMethod(given_sentence, testClass))
-                testOnInheritanceTree(story, testClass);
-            else {
-                Class[] sub_classes = testClass.getDeclaredClasses();
-                for (Class<?> sub_class : sub_classes)
-                    testOnNestedClasses(story, sub_class);
-            }
-        } catch (GivenNotFoundException g){
-            Class[] sub_classes = testClass.getDeclaredClasses();
+        if (null != findGivenMethod(given_sentence, testClass))
+            testOnInheritanceTree(story, testClass);
+        else {
+            Class<?>[] sub_classes = testClass.getDeclaredClasses();
             for (Class<?> sub_class : sub_classes)
                 testOnNestedClasses(story, sub_class);
-        } catch (IllegalArgumentException | WordNotFoundException e){
-            e.printStackTrace();
         }
     }
+
 }
