@@ -5,7 +5,6 @@ import Provided.StoryTestException;
 import java.util.List;
 
 public class StoryTestExceptionImpl extends StoryTestException {
-    //TODO: add any necessary variables and correct the functions in StoryTesterImpl to keep track of things.
     private int numOfFails;
     private String sentence;
     private List<String> storyExpected;
@@ -20,18 +19,6 @@ public class StoryTestExceptionImpl extends StoryTestException {
 
     public void setNumOfFails(int numOfFails) {
         this.numOfFails = numOfFails;
-    }
-
-    public void setSentence(String sentence) {
-        this.sentence = sentence;
-    }
-
-    public void setStoryExpected(List<String> storyExpected) {
-        this.storyExpected = storyExpected;
-    }
-
-    public void setTestResult(List<String> testResult) {
-        this.testResult = testResult;
     }
 
     @Override

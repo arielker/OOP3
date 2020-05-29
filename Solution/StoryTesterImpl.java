@@ -1,6 +1,9 @@
 package Solution;
 
-import Provided.*;
+import Provided.GivenNotFoundException;
+import Provided.StoryTester;
+import Provided.ThenNotFoundException;
+import Provided.WhenNotFoundException;
 import org.junit.ComparisonFailure;
 
 import java.lang.reflect.Constructor;
@@ -190,7 +193,7 @@ public class StoryTesterImpl implements StoryTester {
         return null;
     }
 
-    private boolean compareAnnotationValue(String value, String sentence/*, List<String> args*/) {
+    private boolean compareAnnotationValue(String value, String sentence) {
         String[] valueL = value.split(" ");
         String[] sentenceL = sentence.split(sentence.substring(0, sentence.indexOf(" ") + 1))[1].split(" ");
         if (valueL.length != sentenceL.length) {
@@ -285,5 +288,4 @@ public class StoryTesterImpl implements StoryTester {
                 testOnNestedClasses(story, sub_class);
         }
     }
-
 }
