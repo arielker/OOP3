@@ -17,6 +17,13 @@ import java.util.Map;
 
 public class StoryTesterImpl implements StoryTester {
 
+    /**
+     * This method finds the right 'Given' method for the given sentence in the given test class and
+     * returns it.
+     * @param sentence
+     * @param testClass
+     * @return
+     */
     private Method findGivenMethod(String sentence, Class<?> testClass) {
         //it's guaranteed that there is only ONE 'Given' method that fits (somewhere in the inheritance hierarchy)
         if (null == testClass)
@@ -34,6 +41,13 @@ public class StoryTesterImpl implements StoryTester {
         return findGivenMethod(sentence, testClass.getSuperclass());
     }
 
+    /**
+     * This method invokes the given method with the given object.
+     * Why have a special method for 'Given', you ask? This will be answered a few methods ahead.
+     * @param object
+     * @param method
+     * @param args
+     */
     private void invokeGivenMethod(Object object, Method method, List<String> args) {
         Object[] argsArray = parseArguments(args);
         method.setAccessible(true);
@@ -44,6 +58,12 @@ public class StoryTesterImpl implements StoryTester {
         }
     }
 
+    /**
+     * This method backs up the given object's fields in a map, using the 'clone > copy c'tor > as is'
+     * that was described in the assignment, and returns the map.
+     * @param object
+     * @return
+     */
     private Map<Field, Object> backup(Object object) {
         if (null == object)
             return null;
@@ -79,6 +99,12 @@ public class StoryTesterImpl implements StoryTester {
         return map;
     }
 
+    /**
+     * This method takes the argument to the upcoming method (which are currently all strings),
+     * parses them to String or Integer, stores them in an Object array and sends them away.
+     * @param args
+     * @return
+     */
     private Object[] parseArguments(List<String> args) {
         Object[] act_args = new Object[args.size()];
         for (int i = 0; i < args.size(); i++) { //parsing arguments
@@ -91,6 +117,14 @@ public class StoryTesterImpl implements StoryTester {
         return act_args;
     }
 
+    /**
+     * This method takes the given sentence, splits it to type II sub-sentences and creates a
+     * list of arguments for every sub-sentence, which we will send when provoking the
+     * corresponding method later.
+     * We did a special method for "Given" sentence for some reason. We blame the system. ACAB.
+     * @param sentence
+     * @return
+     */
     private List<String> fillGivenArguments(String sentence) {
         String[] and_split = sentence.split(" and ");
         List<String> args = new LinkedList<>();
@@ -101,6 +135,13 @@ public class StoryTesterImpl implements StoryTester {
         return args;
     }
 
+    /**
+     * This method takes the given sentence, splits it to type II sub-sentences and creates a
+     * list of arguments for every sub-sentence, which we will send when provoking the
+     * corresponding method later.
+     * @param sentence
+     * @return
+     */
     private List<List<String>> fillArguments(String sentence) {
         String[] or_split = sentence.split(" or ");
         List<List<String>> args = new LinkedList<>();
@@ -115,6 +156,16 @@ public class StoryTesterImpl implements StoryTester {
         return args;
     }
 
+    /**
+     * This method finds and invokes the method that fits the given sentence.
+     * If this sentence starts with "then", this method will also create an instance of
+     * StoryTestException and fill it correspondingly.
+     * @param sentence
+     * @param testClass
+     * @param emptyInst
+     * @return
+     * @throws Exception
+     */
     private StoryTestExceptionImpl findRightMethod(String sentence, Class<?> testClass, Object emptyInst) throws Exception {
         Method[] methods = testClass.getDeclaredMethods();
         String[] ors = sentence.split(" or ");
@@ -173,6 +224,13 @@ public class StoryTesterImpl implements StoryTester {
         return findRightMethod(sentence, testClass.getSuperclass(), emptyInst);
     }
 
+    /**
+     * This method finds the constructor for the test class and create a new, empty instance to use
+     * for future method invokes.
+     * The method knows to detect nested class and also find the right constructor for it.
+     * @param testClass
+     * @return
+     */
     private Object createEmptyObject(Class<?> testClass) {
         if (null == testClass)
             return null;
@@ -193,6 +251,12 @@ public class StoryTesterImpl implements StoryTester {
         return null;
     }
 
+    /**
+     * Checks if a method, represented here by its annotation's value, fits the given sentence.
+     * @param value
+     * @param sentence
+     * @return
+     */
     private boolean compareAnnotationValue(String value, String sentence) {
         String[] valueL = value.split(" ");
         String[] sentenceL = sentence.split(sentence.substring(0, sentence.indexOf(" ") + 1))[1].split(" ");
@@ -210,11 +274,22 @@ public class StoryTesterImpl implements StoryTester {
         return true;
     }
 
+    /**
+     * QoL function to return the annotation class that fits the given sentence.
+     * @param sentence
+     * @return
+     */
     private Class<?> getFirstWord(String sentence) {
         String w = sentence.substring(0, sentence.indexOf(" "));
         return w.equals("Given") ? Given.class : (w.equals("When") ? When.class : Then.class);
     }
 
+    /**
+     * Restoring all fields to the object we are working on to their state before the last set of "when"
+     * statements.
+     * @param object
+     * @param fieldObjectMap
+     */
     private void restore(Object object, Map<Field, Object> fieldObjectMap) {
         if (null == object || fieldObjectMap.isEmpty())
             return;
@@ -232,6 +307,14 @@ public class StoryTesterImpl implements StoryTester {
         }
     }
 
+    /**
+     * For every sentence of the story, finds the right method (in the inheritance path) to run.
+     * @param story contains the text of the story to test, the string is
+     * divided to line using '\n'. each word in a line is separated by space
+     * (' ').
+     * @param testClass the test class which the story should be run on.
+     * @throws Exception
+     */
     @Override
     public void testOnInheritanceTree(String story, Class<?> testClass) throws Exception {
         if (story == null || testClass == null) {
@@ -275,6 +358,14 @@ public class StoryTesterImpl implements StoryTester {
         }
     }
 
+    /**
+     * Finds the (nested) class that fits the Given sentence, and runs the story on the found class.
+     * @param story contains the text of the story to test, the string is
+     * divided to line using '\n'. each word in a line is separated by space
+     * (' ').
+     * @param testClass the test class which the story should be run on.
+     * @throws Exception
+     */
     @Override
     public void testOnNestedClasses(String story, Class<?> testClass) throws Exception {
         if (null == story || null == testClass)

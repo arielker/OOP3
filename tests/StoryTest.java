@@ -143,7 +143,7 @@ public class StoryTest extends StoryTestParent1 {
         private void nothing(String NOTHING) {return;}
     }
 
-    static class Inner1 {
+    class Inner1 {
         protected C c;
         class i1 {
             class i2{

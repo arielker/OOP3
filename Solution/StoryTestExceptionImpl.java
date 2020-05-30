@@ -6,9 +6,9 @@ import java.util.List;
 
 public class StoryTestExceptionImpl extends StoryTestException {
     private int numOfFails;
-    private String sentence;
-    private List<String> storyExpected;
-    private List<String> testResult;
+    private final String sentence;
+    private final List<String> storyExpected;
+    private final List<String> testResult;
 
     public StoryTestExceptionImpl(String sentence, List<String> storyExpected, List<String> testResult) {
         this.numOfFails = 0;
